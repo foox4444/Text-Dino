@@ -8,7 +8,10 @@ GAME_HEIGHT = 250
 
 class Block(pygame.Rect):
     def __init__(self, coordinates, size, image):
-        super().__init__(coordinates, size)
+        self.x = coordinates[0]
+        self.y = coordinates[1]
+        self.width = size[0]
+        self.height = size[1]
         self.image = image
         self.velocity_x = 0
         self.velocity_y = 0
@@ -25,12 +28,16 @@ RESET_IMAGE = pygame.transform.scale(pygame.image.load("images/reset.png"), (70,
 DINO_RUN1_IMAGE = pygame.transform.scale(pygame.image.load("images/dino-run1.png"), (88, 94))
 DINO_RUN2_IMAGE = pygame.transform.scale(pygame.image.load("images/dino-run2.png"), (88, 94))
 TRACK_IMAGE = pygame.transform.scale(pygame.image.load("images/track.png"), (750, 30))
+BIRD1_IMAGE = pygame.transform.scale(pygame.image.load("images/bird1.png"), (50, 50))
+BIRD2_IMAGE = pygame.transform.scale(pygame.image.load("images/bird2.png"), (50, 50))
+DINO_DUCK1_IMAGE = pygame.transform.scale(pygame.image.load("images/dino-duck1.png"), (110, 52))
+DINO_DUCK2_IMAGE = pygame.transform.scale(pygame.image.load("images/dino-duck2.png"),(110, 52))
 
 pygame.init()
 window = pygame.display.set_mode((GAME_WIDTH, GAME_HEIGHT)) #game window
 pygame.display.set_caption("Adventurer Dino") #title
 clock = pygame.time.Clock()
-GAME_FONT = pygame.font.SysFont("Courier", 20)
+GAME_FONT = pygame.font.SysFont("Lucida Console", 20)
 
 VELOCITY_X = -8
 VELOCITY_Y = -10
@@ -45,35 +52,57 @@ reset_block = Block((340, 150), RESET_IMAGE.get_size(), RESET_IMAGE)
 track_block = Block((0, 220), TRACK_IMAGE.get_size(), TRACK_IMAGE)
 track_block2 = Block((750, 220), TRACK_IMAGE.get_size(), TRACK_IMAGE)
 
+#Theme Variables
+sky_color = "light blue"
+text_color = "black"
+
+#Variables
 cactus_list = []
 last_place_cactus_time = 0
 game_over = False
 use_first_image = True
 walk_delay = 0
 score = 0
+is_ducking = False
+wing_delay = 0
+use_first_wing = True
+high_score = 0
 
 def place_cactus():
-    random_cactus_image = random.choice(CACTUS_IMAGES)
-    random_cactus = Block((GAME_WIDTH, GAME_HEIGHT - random_cactus_image.height), random_cactus_image.get_size(), random_cactus_image)
+    spawn_choice = random.randint(0, 1)
+    
+    if spawn_choice == 0:
+        random_cactus_image = random.choice(CACTUS_IMAGES)
+        random_cactus = Block((GAME_WIDTH, GAME_HEIGHT - random_cactus_image.height), random_cactus_image.get_size(), random_cactus_image)
+# Sets the birds at different heights
+    else:
+        bird_height = random.choice([170, 140, 80])
+        random_cactus = Block((GAME_WIDTH, bird_height), BIRD1_IMAGE.get_size(), BIRD1_IMAGE)
 
     random_cactus.velocity_x = VELOCITY_X
     cactus_list.append(random_cactus)
     
 
 def move():
-    global cactus_list, game_over, score
+    global cactus_list, game_over, score, high_score, sky_color, text_color
     score += 1
     
-    dino.velocity_y += GRAVITY
+    if is_ducking and dino.y < GAME_HEIGHT - dino.height:
+        dino.velocity_y += GRAVITY * 4
+    else:
+        dino.velocity_y += GRAVITY
     dino.y += dino.velocity_y
     if dino.y >= GAME_HEIGHT - dino.height:
         dino.y = GAME_HEIGHT - dino.height
+        dino.velocity_y = 0
     
     for cactus in cactus_list:
         cactus.x += cactus.velocity_x
         if dino.colliderect(cactus):
             game_over = True
             dino.image = DINO_DEAD_IMAGE
+            if score > high_score:
+                high_score = score
 
 #Track moving animation
     track_block.x += VELOCITY_X
@@ -85,6 +114,7 @@ def move():
     
     cactus_list = [cactus for cactus in cactus_list if cactus.x + cactus.width > 0]
 
+
 def draw_game_over():
     time.sleep(1)
     window.fill("light blue")
@@ -93,6 +123,9 @@ def draw_game_over():
     
     text_render = GAME_FONT.render(str(score), True, "black")
     window.blit(text_render, (700, 20))
+    
+    high_score_text = GAME_FONT.render("HI " + str(high_score), True, "black")
+    window.blit(high_score_text, (580, 20))
 
 def draw():
     window.fill("light blue")
@@ -107,6 +140,9 @@ def draw():
     text_render = GAME_FONT.render(str(score), True, "black")
     window.blit(text_render, (700, 20))
 
+    high_score_text = GAME_FONT.render("HI " + str(high_score), True, "black")
+    window.blit(high_score_text, (580, 20))
+
 #game loop
 while True:
     for event in pygame.event.get():        
@@ -114,7 +150,7 @@ while True:
             pygame.quit()
             exit()        
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
+            if event.key == pygame.K_SPACE or event.key == pygame.K_UP:
                 if game_over:
                     cactus_list.clear()
                     game_over = False
@@ -124,12 +160,29 @@ while True:
                     dino.velocity_y = 0
                     dino.image = DINO_IMAGE
                 #the gravity state
-                elif dino.y >= GAME_HEIGHT - dino.height:
+                elif dino.y >= GAME_HEIGHT - dino.height and not is_ducking:
                     dino.velocity_y = VELOCITY_Y
+            if event.key == pygame.K_DOWN:
+                is_ducking = True
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_DOWN:
+                is_ducking = False
 
 
 # Running Animation
-    dino.image = DINO_IMAGE
+    if is_ducking:
+        dino.height = 52
+        dino.width = 110
+        dino.size = (110, 52)
+        if dino.y >= GAME_HEIGHT - 94:
+            dino.y = GAME_HEIGHT - 52
+    else:
+        dino.height = 94
+        dino.width = 88
+        dino.size = (88, 94)
+    
+    if dino.y < GAME_HEIGHT - dino.height and not game_over:
+        dino.image = DINO_IMAGE
     if dino.y >= GAME_HEIGHT - dino.height:
         walk_delay += 1
         
@@ -137,11 +190,42 @@ while True:
             use_first_image = not use_first_image
             walk_delay = 0
         
-        if use_first_image:
-            dino.image = DINO_RUN1_IMAGE
+        
+        if is_ducking:
+            if use_first_image:
+                dino.image = DINO_DUCK1_IMAGE
+            else:
+                dino.image = DINO_DUCK2_IMAGE
         else:
-            dino.image = DINO_RUN2_IMAGE
+            if use_first_image:
+                dino.image = DINO_RUN1_IMAGE
+            else:
+                dino.image = DINO_RUN2_IMAGE
+    
+#Wing Animation
+    wing_delay += 1
+    if wing_delay >= 24:
+        use_first_wing = not use_first_wing
+        wing_delay = 0
 
+        for cactus in cactus_list:
+            if cactus.image == BIRD1_IMAGE or cactus.image == BIRD2_IMAGE:
+                if not use_first_wing:
+                    cactus.y += 6
+                else:
+                    cactus.y -= 6
+    
+    for cactus in cactus_list:
+        if cactus.image == BIRD1_IMAGE or cactus.image == BIRD2_IMAGE:
+            if use_first_wing:
+                cactus.image = BIRD1_IMAGE
+            else:
+                cactus.image = BIRD2_IMAGE
+
+    if (score//500) % 2 == 1:
+        sky_color = "navy"
+        text_color = "white"
+        
 
     now = pygame.time.get_ticks()
     if now - last_place_cactus_time >= 1000:
