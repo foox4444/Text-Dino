@@ -52,6 +52,8 @@ window = pygame.display.set_mode((GAME_WIDTH, GAME_HEIGHT)) #game window
 pygame.display.set_caption("Adventurer Dino") #title
 clock = pygame.time.Clock()
 GAME_FONT = pygame.font.SysFont("Lucida Console", 20)
+PAUSE_PANEL = pygame.Rect(175, 35, 400, 190)
+pause_selection = 0
 
 VELOCITY_X = -8
 VELOCITY_Y = -10
@@ -84,8 +86,32 @@ score = 0
 is_ducking = False
 wing_delay = 0
 use_first_wing = True
-high_score = 0
 paused = False
+
+#Save high score
+APP_NAME = "AdventurerDino"
+if sys.platform == "win32":
+    SAVE_BASE = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+else:
+    SAVE_BASE = os.path.expanduser("~")
+SAVE_FOLDER = os.path.join(SAVE_BASE, APP_NAME)
+os.makedirs(SAVE_FOLDER, exist_ok=True)
+
+HIGH_SCORE_FILE = os.path.join(SAVE_FOLDER, "high_score.txt")
+def load_high_score():
+    try:
+        with open(HIGH_SCORE_FILE, "r") as file:
+            return max(0, int(file.read().strip()))
+    except (FileNotFoundError, ValueError, OSError):
+        return 0
+
+def save_high_score():
+    try:
+        with open(HIGH_SCORE_FILE, "w") as file:
+            file.write(str(high_score))
+    except OSError as error:
+        print(f"Could not save high score: {error}")
+high_score = load_high_score()
 
 def place_cactus():
     spawn_choice = random.randint(0, 1)
@@ -105,6 +131,9 @@ def place_cactus():
 def move():
     global cactus_list, game_over, score, high_score, sky_color, text_color
     score += 1
+    if score > high_score:
+        high_score = score
+        save_high_score()
     
     if is_ducking and dino.y < GAME_HEIGHT - dino.height:
         dino.velocity_y += GRAVITY * 4
@@ -149,9 +178,62 @@ def reset_clouds():
     cloud_block2.x = cloud_block.x + random.randint(250, 450)
     cloud_block3.x = random.randint(250, 450)
 
+def restart_game():
+    global score, game_over, paused, is_ducking, last_place_cactus_time, walk_delay, use_first_image, wing_delay, use_first_wing
+    # Clears all obstacles
+    cactus_list.clear()
+    #Reset cloud positions
+    reset_clouds()
+    #Reset game state
+    score = 0
+    game_over = False
+    paused = False
+    is_ducking = False
+    #Reset the Dino
+    dino.x = 50
+    dino.y = GAME_HEIGHT - 94
+    dino.width = 88
+    dino.height = 94
+    dino.size = (88, 94)
+    dino.velocity_y = 0
+    dino.image = DINO_IMAGE
+    #Reset animations
+    walk_delay = 0
+    use_first_image = True
+    wing_delay = 0
+    use_first_wing = True
+    
+    last_place_cactus_time = pygame.time.get_ticks()
+
+def draw_pause_menu():
+    #Dark overlay
+    overlay = pygame.Surface((GAME_WIDTH, GAME_HEIGHT))
+    overlay.set_alpha(180)
+    overlay.fill((0, 0, 0))
+    window.blit(overlay, (0, 0))
+    #Menu panel
+    pygame.draw.rect(window, (40, 40, 50), PAUSE_PANEL, border_radius=12)
+    #Title
+    title = GAME_FONT.render("PAUSED", True, (255, 255, 255))
+    window.blit(title, title.get_rect(center=(375, 65)))
+    #Menu options
+    options = ["RESUME", "RESTART"]
+    for i, option in enumerate(options):
+        button_rect = pygame.Rect(250, 95 + i * 45, 250, 35)
+        if i == pause_selection:
+            color = (39, 130, 85)
+        else:
+            color = (75, 75, 85)
+        pygame.draw.rect(window, color, button_rect, border_radius=6)
+        text = GAME_FONT.render(option, True, (255, 255, 255))
+        window.blit(text, text.get_rect(center=button_rect.center))
+    # Keyboard instructions
+    hint = pygame.font.SysFont("Lucida Console", 11).render("UP/DOWN: SELECT   ENTER: CONFIRM", True, (220, 220, 220))
+    window.blit(hint, hint.get_rect(center=(375, 205)))
+
 def draw_game_over():
     time.sleep(1)
-    window.fill(sky_color)
+    window.fill("light blue")
     window.blit(game_block.image, game_block)
     window.blit(reset_block.image, reset_block)
     
@@ -190,6 +272,16 @@ while True:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_p and not game_over:
                 paused = not paused
+            elif paused:
+                if event.key == pygame.K_UP or event.key == pygame.K_DOWN:
+                    pause_selection = 1 - pause_selection
+                if event.key == pygame.K_RETURN:
+                    if pause_selection == 0:
+                        paused = False
+                    else:
+                        restart_game()
+                elif event.key == pygame.K_r:
+                    restart_game()
             if (event.key == pygame.K_SPACE or event.key == pygame.K_UP) and not paused:
                 if game_over:
                     cactus_list.clear()
@@ -292,8 +384,7 @@ while True:
             move()
         draw()
         if paused : 
-            pause_text = GAME_FONT.render("PAUSED", True, text_color)
-            window.blit(pause_text, (150, 110))
+            draw_pause_menu()
         pygame.display.update()
         clock.tick(60)
     
